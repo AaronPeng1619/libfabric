@@ -33,52 +33,29 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "tcpx.h"
+#include "dpdk.h"
 
 
-static struct fi_ops_domain tcpx_domain_ops = {
+static struct fi_ops_domain dpdk_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = ofi_ip_av_create,
-	.cq_open = tcpx_cq_open,
-	.endpoint = tcpx_endpoint,
+	.av_open = fi_no_av_open,
+	.cq_open = dpdk_cq_open,
+	.endpoint = fi_no_endpoint,
 	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = tcpx_cntr_open,
-	.poll_open = fi_poll_create,
+	.cntr_open = dpdk_cntr_open,
+	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = tcpx_srx_context,
+	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
 	.query_collective = fi_no_query_collective,
 };
 
-static int tcpx_set_ops(struct fid *fid, const char *name,
-			uint64_t flags, void *ops, void *context)
+static int dpdk_domain_close(fid_t fid)
 {
-	struct tcpx_domain *domain;
-
-	domain = container_of(fid, struct tcpx_domain,
-			      util_domain.domain_fid.fid);
-	if (flags)
-		return -FI_EBADFLAGS;
-
-	if (!strcasecmp(name, OFI_OPS_DYNAMIC_RBUF)) {
-		domain->dynamic_rbuf = ops;
-		if (domain->dynamic_rbuf->size != sizeof(*domain->dynamic_rbuf)) {
-			domain->dynamic_rbuf = NULL;
-			return -FI_ENOSYS;
-		}
-
-		return 0;
-	}
-
-	return -FI_ENOSYS;
-}
-
-static int tcpx_domain_close(fid_t fid)
-{
-	struct tcpx_domain *domain;
+	struct dpdk_domain *domain;
 	int ret;
 
-	domain = container_of(fid, struct tcpx_domain,
+	domain = container_of(fid, struct dpdk_domain,
 			      util_domain.domain_fid.fid);
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -89,31 +66,30 @@ static int tcpx_domain_close(fid_t fid)
 	return FI_SUCCESS;
 }
 
-static struct fi_ops tcpx_domain_fi_ops = {
+static struct fi_ops dpdk_domain_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcpx_domain_close,
+	.close = dpdk_domain_close,
 	.bind = ofi_domain_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 	.tostr = NULL,
-	.ops_set = tcpx_set_ops,
+	.ops_set = fi_no_ops_set,
 };
 
-static struct fi_ops_mr tcpx_domain_fi_ops_mr = {
+static struct fi_ops_mr dpdk_domain_fi_ops_mr = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = ofi_mr_reg,
-	.regv = ofi_mr_regv,
-	.regattr = ofi_mr_regattr,
+	.reg = fi_no_mr_reg,
+	.regv = fi_no_mr_regv,
+	.regattr = fi_no_mr_regattr,
 };
 
-int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+int dpdk_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **domain_fid, void *context)
 {
-	struct tcpx_domain *domain;
+	struct dpdk_domain *domain;
 	int ret;
 
-	// check to see if provider can satisfy fi_info attributes?
-	ret = ofi_prov_check_info(&tcpx_util_prov, fabric->api_version, info);
+	ret = ofi_prov_check_info(&dpdk_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 
@@ -121,19 +97,14 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (!domain)
 		return -FI_ENOMEM;
 
-	// create underlying domain container
 	ret = ofi_domain_init(fabric, info, &domain->util_domain, context,
 			      OFI_LOCK_MUTEX);
 	if (ret)
 		goto err;
 
-	// register domain ops
-	// First register base struct ops
-	domain->util_domain.domain_fid.fid.ops = &tcpx_domain_fi_ops;
-	// Then the ops that allocate objects
-	domain->util_domain.domain_fid.ops = &tcpx_domain_ops;
-	// Memory region ops are separate for some reason
-	domain->util_domain.domain_fid.mr = &tcpx_domain_fi_ops_mr;
+	domain->util_domain.domain_fid.fid.ops = &dpdk_domain_fi_ops;
+	domain->util_domain.domain_fid.ops = &dpdk_domain_ops;
+	domain->util_domain.domain_fid.mr = &dpdk_domain_fi_ops_mr;
 	*domain_fid = &domain->util_domain.domain_fid;
 
 	return FI_SUCCESS;

@@ -33,71 +33,35 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
-#include "tcpx.h"
-#include <poll.h>
+#include "dpdk.h"
 
 #include <sys/types.h>
-#include <ifaddrs.h>
-#include <net/if.h>
 #include <ofi_util.h>
+#include <stdlib.h>
 
-struct fi_ops_fabric tcpx_fabric_ops = {
-	.size = sizeof(struct fi_ops_fabric),
-	.domain = tcpx_domain_open,
-	.passive_ep = tcpx_passive_ep,
-	.eq_open = tcpx_eq_create,
-	.wait_open = ofi_wait_fd_open,
-	.trywait = ofi_trywait
-};
-
-static int tcpx_fabric_close(fid_t fid)
+static int dpdk_getinfo(uint32_t version, const char *node, const char *service,
+			uint64_t flags, const struct fi_info *hints,
+			struct fi_info **info)
 {
-	int ret;
-	struct tcpx_fabric *fabric;
-
-	// Get pointer to struct tcpx_fabric
-	fabric = container_of(fid, struct tcpx_fabric,
-			      util_fabric.fabric_fid.fid);
-
-	ret = ofi_fabric_close(&fabric->util_fabric);
-	if (ret)
-		return ret;
-
-	free(fabric);
-	return 0;
+	/* Not Implemented */
 }
 
-struct fi_ops tcpx_fabric_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = tcpx_fabric_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+static void fi_dpdk_fini(void)
+{
+	/* empty as of now */
+}
+
+struct fi_provider dpdk_prov = {
+	.name = "dpdk",
+	.version = OFI_VERSION_DEF_PROV,
+	.fi_version = OFI_VERSION_LATEST,
+	.getinfo = dpdk_getinfo,
+	.fabric = dpdk_create_fabric,
+	.cleanup = fi_dpdk_fini,
 };
 
-int tcpx_create_fabric(struct fi_fabric_attr *attr,
-		       struct fid_fabric **fabric_fid, void *context)
+// DPDK_INI TODO: implement this macro (which should literally output the line below)	
+struct fi_provider* fi_dpdk_ini(void)
 {
-	struct tcpx_fabric *fabric;
-	int ret;
-
-	fabric = calloc(1, sizeof(*fabric));
-	if (!fabric)
-		return -FI_ENOMEM;
-
-	ret = ofi_fabric_init(&tcpx_prov, tcpx_info.fabric_attr, attr,
-			      &fabric->util_fabric, context);
-	if (ret) {
-		free(fabric);
-		return ret;
-	}
-
-	// Points to fabric ops
-	// First register base struct ops
-	fabric->util_fabric.fabric_fid.fid.ops = &tcpx_fabric_fi_ops;
-	// Now register ops that actually do something?
-	fabric->util_fabric.fabric_fid.ops = &tcpx_fabric_ops;
-	*fabric_fid = &fabric->util_fabric.fabric_fid; // Point to created fid_fabric
-
-	return 0;
+	return &dpdk_prov;
 }

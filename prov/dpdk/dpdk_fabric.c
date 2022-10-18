@@ -33,7 +33,7 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
-#include "tcpx.h"
+#include "dpdk.h"
 #include <poll.h>
 
 #include <sys/types.h>
@@ -41,22 +41,21 @@
 #include <net/if.h>
 #include <ofi_util.h>
 
-struct fi_ops_fabric tcpx_fabric_ops = {
+struct fi_ops_fabric dpdk_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
-	.domain = tcpx_domain_open,
-	.passive_ep = tcpx_passive_ep,
-	.eq_open = tcpx_eq_create,
-	.wait_open = ofi_wait_fd_open,
-	.trywait = ofi_trywait
+	.domain = dpdk_domain_open,
+	.passive_ep = fi_no_passive_ep,
+	.eq_open = fi_no_eq_open,
+	.wait_open = fi_no_wait_open,
+	.trywait = fi_no_trywait
 };
 
-static int tcpx_fabric_close(fid_t fid)
+static int dpdk_fabric_close(fid_t fid)
 {
 	int ret;
-	struct tcpx_fabric *fabric;
+	struct dpdk_fabric *fabric;
 
-	// Get pointer to struct tcpx_fabric
-	fabric = container_of(fid, struct tcpx_fabric,
+	fabric = container_of(fid, struct dpdk_fabric,
 			      util_fabric.fabric_fid.fid);
 
 	ret = ofi_fabric_close(&fabric->util_fabric);
@@ -67,37 +66,34 @@ static int tcpx_fabric_close(fid_t fid)
 	return 0;
 }
 
-struct fi_ops tcpx_fabric_fi_ops = {
+struct fi_ops dpdk_fabric_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcpx_fabric_close,
+	.close = dpdk_fabric_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 
-int tcpx_create_fabric(struct fi_fabric_attr *attr,
+int dpdk_create_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric_fid, void *context)
 {
-	struct tcpx_fabric *fabric;
+	struct dpdk_fabric *fabric;
 	int ret;
 
 	fabric = calloc(1, sizeof(*fabric));
 	if (!fabric)
 		return -FI_ENOMEM;
 
-	ret = ofi_fabric_init(&tcpx_prov, tcpx_info.fabric_attr, attr,
+	ret = ofi_fabric_init(&dpdk_prov, dpdk_info.fabric_attr, attr,
 			      &fabric->util_fabric, context);
 	if (ret) {
 		free(fabric);
 		return ret;
 	}
 
-	// Points to fabric ops
-	// First register base struct ops
-	fabric->util_fabric.fabric_fid.fid.ops = &tcpx_fabric_fi_ops;
-	// Now register ops that actually do something?
-	fabric->util_fabric.fabric_fid.ops = &tcpx_fabric_ops;
-	*fabric_fid = &fabric->util_fabric.fabric_fid; // Point to created fid_fabric
+	fabric->util_fabric.fabric_fid.fid.ops = &dpdk_fabric_fi_ops;
+	fabric->util_fabric.fabric_fid.ops = &dpdk_fabric_ops;
+	*fabric_fid = &fabric->util_fabric.fabric_fid;
 
 	return 0;
 }
